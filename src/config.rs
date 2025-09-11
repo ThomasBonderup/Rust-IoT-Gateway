@@ -19,3 +19,29 @@ pub fn load_config(config_file: Option<String>) -> anyhow::Result<GatewayGfg> {
     }
     Ok(builder.build()?.try_deserialize()?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{env, fs};
+    use tempfile::tempdir;
+
+    #[test]
+    fn loads_from_config_file_in_cwd() {
+        let dir = tempdir().expect("failed to create temp dir for test");
+        let toml = r#"
+            [http]
+            bind = "127.0.0.1:9999"
+        "#;
+        fs::write(dir.path().join("gateway.toml"), toml).unwrap();
+
+        let old_cwd = env::current_dir().unwrap();
+        env::set_current_dir(dir.path()).unwrap();
+
+        let cfg = load_config(None).expect("confile file should load");
+
+        assert_eq!(cfg.http.bind, "127.0.0.1:9999");
+
+        env::set_current_dir(old_cwd).unwrap();
+    }
+}
