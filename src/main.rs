@@ -1,10 +1,9 @@
 mod config;
 mod http;
 
-use std::net::SocketAddr;
-
 use crate::config::GatewayGfg;
 use clap::Parser;
+use std::net::SocketAddr;
 
 #[derive(Parser)]
 pub struct Cli {
@@ -23,6 +22,19 @@ fn merge_overrides(mut cfg: GatewayGfg, cli: &Cli) -> GatewayGfg {
     cfg
 }
 
+fn init_tracing() {
+    use tracing_subscriber::{EnvFilter, fmt};
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    fmt()
+        .with_env_filter(filter)
+        .json()
+        .with_target(true)
+        .with_current_span(true)
+        .with_line_number(true)
+        .with_file(true)
+        .init();
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -37,6 +49,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     println!("Loaded config: {:?}", cfg);
+
+    init_tracing();
 
     http::serve(cfg.http.bind).await?;
     Ok(())
