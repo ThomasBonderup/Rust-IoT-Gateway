@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GatewayGfg {
@@ -6,18 +7,40 @@ pub struct GatewayGfg {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct HttpCfg {
-    pub bind: String,
+    #[serde(default = "default_bind")]
+    pub bind: SocketAddr,
 }
 
-pub fn load_config(config_file: Option<String>) -> anyhow::Result<GatewayGfg> {
-    let mut builder = config::Config::builder()
-        .add_source(config::File::with_name("gateway").required(false))
-        .add_source(config::Environment::with_prefix("GATEWAY").separator("__"));
-    if let Some(path) = config_file {
-        builder = builder.add_source(config::File::with_name(&path));
+fn default_bind() -> SocketAddr {
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080)
+}
+
+impl GatewayGfg {
+    pub fn load(path: Option<String>) -> anyhow::Result<Self> {
+        Self::from_builder(build_config(path)?)
     }
-    Ok(builder.build()?.try_deserialize()?)
+
+    pub fn validate(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(self.http.bind.port() != 0, "http.bind port cannot be 0");
+        Ok(())
+    }
+
+    fn from_builder(cfg: config::Config) -> anyhow::Result<Self> {
+        Ok(cfg.try_deserialize()?)
+    }
+}
+
+fn build_config(path: Option<String>) -> anyhow::Result<config::Config> {
+    use config::{Config, Environment, File};
+    let mut builder = Config::builder()
+        .add_source(File::with_name("gateway").required(false))
+        .add_source(Environment::with_prefix("GATEWAY").separator("__"));
+    if let Some(path) = path {
+        builder = builder.add_source(File::with_name(&path));
+    }
+    Ok(builder.build()?)
 }
 
 #[cfg(test)]
@@ -38,9 +61,12 @@ mod tests {
         let old_cwd = env::current_dir().unwrap();
         env::set_current_dir(dir.path()).unwrap();
 
-        let cfg = load_config(None).expect("confile file should load");
+        let cfg = GatewayGfg::load(None).expect("confile file should load");
 
-        assert_eq!(cfg.http.bind, "127.0.0.1:9999");
+        assert_eq!(
+            cfg.http.bind,
+            "127.0.0.1:9999".parse::<SocketAddr>().unwrap()
+        );
 
         env::set_current_dir(old_cwd).unwrap();
     }

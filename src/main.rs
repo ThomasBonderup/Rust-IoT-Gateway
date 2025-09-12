@@ -1,7 +1,9 @@
 mod config;
 mod http;
 
-use crate::config::{GatewayGfg, load_config};
+use std::net::SocketAddr;
+
+use crate::config::GatewayGfg;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -10,14 +12,14 @@ pub struct Cli {
     config: Option<String>,
 
     #[arg(long)]
-    http_bind: Option<String>,
+    http_bind: Option<SocketAddr>,
 
     #[arg(long)]
     print_bind: bool,
 }
 
 fn merge_overrides(mut cfg: GatewayGfg, cli: &Cli) -> GatewayGfg {
-    cfg.http.bind = cli.http_bind.clone().unwrap_or(cfg.http.bind);
+    cfg.http.bind = cli.http_bind.unwrap_or(cfg.http.bind);
     cfg
 }
 
@@ -25,8 +27,8 @@ fn merge_overrides(mut cfg: GatewayGfg, cli: &Cli) -> GatewayGfg {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let mut cfg = load_config(cli.config.clone())?;
-
+    let mut cfg = GatewayGfg::load(cli.config.clone())?;
+    cfg.validate()?;
     cfg = merge_overrides(cfg, &cli);
 
     if cli.print_bind {
@@ -36,6 +38,6 @@ async fn main() -> anyhow::Result<()> {
 
     println!("Loaded config: {:?}", cfg);
 
-    http::serve(&cfg.http.bind).await?;
+    http::serve(cfg.http.bind).await?;
     Ok(())
 }
