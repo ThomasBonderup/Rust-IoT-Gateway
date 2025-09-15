@@ -4,14 +4,24 @@ use tracing::Span;
 
 use axum::http::{self, StatusCode};
 use axum::{Router, response::IntoResponse, routing::get};
+use axum_prometheus::PrometheusMetricLayer;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 
 pub async fn serve(addr: std::net::SocketAddr) -> anyhow::Result<()> {
+    let (prom_layer, prom_handle) = PrometheusMetricLayer::pair();
+
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
-        .route("/metrics", get(metrics))
+        .route(
+            "/metrics",
+            get({
+                let prom_handle = prom_handle.clone();
+                move || async move { prom_handle.render() }
+            }),
+        )
+        .layer(prom_layer)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &http::Request<_>| {
