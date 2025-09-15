@@ -50,11 +50,15 @@ pub async fn serve(addr: std::net::SocketAddr) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip_all, fields(kind = "health"))]
 async fn healthz() -> impl IntoResponse {
+    tracing::info!("health probe ok");
     "ok"
 }
 
+#[tracing::instrument(skip_all)]
 async fn readyz() -> impl IntoResponse {
+    tracing::info!("not ready yet");
     (StatusCode::SERVICE_UNAVAILABLE, "not ready")
 }
 
