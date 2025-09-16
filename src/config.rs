@@ -1,9 +1,13 @@
 use serde::Deserialize;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::PathBuf,
+};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GatewayGfg {
     pub http: HttpCfg,
+    pub storage: StorageCfg,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -11,6 +15,12 @@ pub struct GatewayGfg {
 pub struct HttpCfg {
     #[serde(default = "default_bind")]
     pub bind: SocketAddr,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct StorageCfg {
+    pub db_path: PathBuf,
+    pub min_free_bytes: u64,
 }
 
 fn default_bind() -> SocketAddr {

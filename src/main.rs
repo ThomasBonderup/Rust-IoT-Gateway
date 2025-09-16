@@ -1,9 +1,11 @@
 mod config;
 mod http;
+mod readiness;
 
 use crate::config::GatewayGfg;
 use clap::Parser;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 #[derive(Parser)]
 pub struct Cli {
@@ -51,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Loaded config: {:?}", cfg);
 
     init_tracing();
-
-    http::serve(cfg.http.bind).await?;
+    let cfg = Arc::new(cfg);
+    http::serve(cfg.http.bind, cfg).await?;
     Ok(())
 }

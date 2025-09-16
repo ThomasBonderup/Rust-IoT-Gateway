@@ -1,6 +1,11 @@
+use axum::{Extension, Json};
 use http::Response;
+use serde::Serialize;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tracing::Span;
+use tracing_subscriber::fmt::format::json;
 
 use axum::http::{self, StatusCode};
 use axum::{Router, response::IntoResponse, routing::get};
@@ -8,8 +13,19 @@ use axum_prometheus::PrometheusMetricLayer;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 
-pub async fn serve(addr: std::net::SocketAddr) -> anyhow::Result<()> {
+use crate::config::GatewayGfg;
+use crate::readiness::{self, Readiness, start_readisness_probes};
+
+#[derive(Serialize)]
+struct ReadyReport {
+    disk_ok: bool,
+}
+
+pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::Result<()> {
     let (prom_layer, prom_handle) = PrometheusMetricLayer::pair();
+
+    let readiness = Arc::new(readiness::Readiness::new());
+    start_readisness_probes(cfg.clone(), readiness.clone());
 
     let app = Router::new()
         .route("/healthz", get(healthz))
@@ -21,6 +37,7 @@ pub async fn serve(addr: std::net::SocketAddr) -> anyhow::Result<()> {
                 move || async move { prom_handle.render() }
             }),
         )
+        .layer(Extension(readiness.clone()))
         .layer(prom_layer)
         .layer(
             TraceLayer::new_for_http()
@@ -57,9 +74,15 @@ async fn healthz() -> impl IntoResponse {
 }
 
 #[tracing::instrument(skip_all)]
-async fn readyz() -> impl IntoResponse {
-    tracing::info!("not ready yet");
-    (StatusCode::SERVICE_UNAVAILABLE, "not ready")
+async fn readyz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
+    let report = ReadyReport {
+        disk_ok: r.disk_ok.load(Ordering::Relaxed),
+    };
+    if r.all_ok() {
+        (StatusCode::OK, Json(report))
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(report))
+    }
 }
 
 async fn metrics() -> impl IntoResponse {
