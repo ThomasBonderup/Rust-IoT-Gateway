@@ -7,6 +7,7 @@ use std::{
 #[derive(Debug, Deserialize, Clone)]
 pub struct GatewayGfg {
     pub http: HttpCfg,
+    pub mqtt: MqttCfg,
     pub storage: StorageCfg,
 }
 
@@ -15,6 +16,13 @@ pub struct GatewayGfg {
 pub struct HttpCfg {
     #[serde(default = "default_bind")]
     pub bind: SocketAddr,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MqttCfg {
+    pub host: String,
+    pub port: u16,
+    pub client_id: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

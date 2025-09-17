@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tracing::Span;
-use tracing_subscriber::fmt::format::json;
 
 use axum::http::{self, StatusCode};
 use axum::{Router, response::IntoResponse, routing::get};
@@ -19,6 +18,7 @@ use crate::readiness::{self, Readiness, start_readisness_probes};
 #[derive(Serialize)]
 struct ReadyReport {
     disk_ok: bool,
+    mqtt_ok: bool,
 }
 
 pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::Result<()> {
@@ -77,6 +77,7 @@ async fn healthz() -> impl IntoResponse {
 async fn readyz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
     let report = ReadyReport {
         disk_ok: r.disk_ok.load(Ordering::Relaxed),
+        mqtt_ok: r.mqtt_ok.load(Ordering::Relaxed),
     };
     if r.all_ok() {
         (StatusCode::OK, Json(report))
