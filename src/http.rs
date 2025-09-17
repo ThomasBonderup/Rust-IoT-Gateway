@@ -4,6 +4,8 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use tokio::signal;
+use tokio::signal::unix::SignalKind;
 use tracing::Span;
 
 use axum::http::{self, StatusCode};
@@ -63,8 +65,26 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
     let listener: TcpListener = TcpListener::bind(addr).await?;
     println!("listening on {}", listener.local_addr()?);
 
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(readiness.clone()))
+        .await?;
     Ok(())
+}
+
+pub async fn shutdown_signal(readiness: Arc<Readiness>) {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sigint = signal(SignalKind::interrupt()).unwrap();
+    let mut sigterm = signal(SignalKind::interrupt()).unwrap();
+
+    tokio::select! {
+      _ = sigint.recv() => (),
+      _ = sigterm.recv() => (),
+    }
+
+    readiness.disk_ok.store(false, Ordering::Relaxed);
+    readiness.mqtt_ok.store(false, Ordering::Relaxed);
+
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 }
 
 #[tracing::instrument(skip_all, fields(kind = "health"))]
