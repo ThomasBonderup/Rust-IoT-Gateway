@@ -1,5 +1,6 @@
 mod config;
 mod http;
+mod metrics;
 mod readiness;
 
 use crate::config::GatewayGfg;

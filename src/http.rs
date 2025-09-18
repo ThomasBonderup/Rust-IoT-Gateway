@@ -1,20 +1,18 @@
-use axum::{Extension, Json};
+use axum::http::{self, HeaderValue, StatusCode};
+use axum::{Extension, Json, Router, response::IntoResponse, routing::get};
+use axum_prometheus::PrometheusMetricLayer;
 use http::Response;
+use prometheus::{Encoder, TextEncoder};
 use serde::Serialize;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tokio::signal;
-use tokio::signal::unix::SignalKind;
-use tracing::Span;
-
-use axum::http::{self, StatusCode};
-use axum::{Router, response::IntoResponse, routing::get};
-use axum_prometheus::PrometheusMetricLayer;
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
+use tracing::Span;
 
 use crate::config::GatewayGfg;
+use crate::metrics::{self, EVENTS_RECEIVED};
 use crate::readiness::{self, Readiness, start_readisness_probes};
 
 #[derive(Serialize)]
@@ -35,8 +33,11 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
         .route(
             "/metrics",
             get({
-                let prom_handle = prom_handle.clone();
-                move || async move { prom_handle.render() }
+                let h = prom_handle.clone();
+                move || {
+                    let text = h.render();
+                    metrics(text)
+                }
             }),
         )
         .layer(Extension(readiness.clone()))
@@ -89,12 +90,14 @@ pub async fn shutdown_signal(readiness: Arc<Readiness>) {
 
 #[tracing::instrument(skip_all, fields(kind = "health"))]
 async fn healthz() -> impl IntoResponse {
+    EVENTS_RECEIVED.inc();
     tracing::info!("health probe ok");
     "ok"
 }
 
 #[tracing::instrument(skip_all)]
 async fn readyz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
+    EVENTS_RECEIVED.inc();
     let report = ReadyReport {
         disk_ok: r.disk_ok.load(Ordering::Relaxed),
         mqtt_ok: r.mqtt_ok.load(Ordering::Relaxed),
@@ -106,6 +109,19 @@ async fn readyz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
     }
 }
 
-async fn metrics() -> impl IntoResponse {
-    "metrics go here\n"
+pub async fn metrics(prom_text: String) -> impl IntoResponse {
+    let mut buf = Vec::with_capacity(prom_text.len() + 4096);
+    buf.extend_from_slice(prom_text.as_bytes());
+
+    let encoder = TextEncoder::new();
+    let mfs = crate::metrics::REGISTRY.gather();
+    encoder.encode(&mfs, &mut buf).unwrap();
+    let body = String::from_utf8(buf).unwrap();
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("text/plain; version=0.0.4"),
+        )],
+        body,
+    )
 }
