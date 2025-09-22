@@ -43,8 +43,8 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let mut cfg = GatewayGfg::load(cli.config.clone())?;
-    cfg.validate()?;
     cfg = merge_overrides(cfg, &cli);
+    cfg.validate()?;
 
     if cli.print_bind {
         println!("{}", cfg.http.bind);

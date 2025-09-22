@@ -6,9 +6,14 @@ use std::{
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GatewayGfg {
+    #[serde(default)]
     pub http: HttpCfg,
+    #[serde(default)]
     pub mqtt: MqttCfg,
+    #[serde(default)]
     pub storage: StorageCfg,
+    #[serde(default)]
+    pub health: HealthCfg,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -17,18 +22,60 @@ pub struct HttpCfg {
     #[serde(default = "default_bind")]
     pub bind: SocketAddr,
 }
+impl Default for HttpCfg {
+    fn default() -> Self {
+        Self {
+            bind: default_bind(),
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields, default)]
 pub struct MqttCfg {
     pub host: String,
     pub port: u16,
     pub client_id: String,
 }
+impl Default for MqttCfg {
+    fn default() -> Self {
+        Self {
+            host: "localhost".into(),
+            port: 1883,
+            client_id: "gw-1".into(),
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields, default)]
 pub struct StorageCfg {
     pub db_path: PathBuf,
     pub min_free_bytes: u64,
+}
+impl Default for StorageCfg {
+    fn default() -> Self {
+        Self {
+            db_path: "./data.db".into(),
+            min_free_bytes: 1,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct HealthCfg {
+    pub require_mqtt: bool,
+    pub require_disk: bool,
+    pub probe_interval_ms: Option<u64>,
+}
+impl Default for HealthCfg {
+    fn default() -> Self {
+        Self {
+            require_mqtt: (false),
+            require_disk: (false),
+            probe_interval_ms: Some(1000),
+        }
+    }
 }
 
 fn default_bind() -> SocketAddr {
@@ -41,7 +88,7 @@ impl GatewayGfg {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
-        anyhow::ensure!(self.http.bind.port() != 0, "http.bind port cannot be 0");
+        anyhow::ensure!(!self.mqtt.host.is_empty(), "mqtt.host cannot be empty");
         Ok(())
     }
 

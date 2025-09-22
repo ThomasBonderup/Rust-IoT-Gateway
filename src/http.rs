@@ -1,5 +1,5 @@
 use axum::http::{self, HeaderValue, StatusCode};
-use axum::{Extension, Json, Router, response::IntoResponse, routing::get};
+use axum::{Extension, Router, response::IntoResponse, routing::get};
 use axum_prometheus::PrometheusMetricLayer;
 use http::Response;
 use prometheus::{Encoder, TextEncoder};
@@ -12,11 +12,12 @@ use tower_http::trace::TraceLayer;
 use tracing::Span;
 
 use crate::config::GatewayGfg;
-use crate::metrics::{self, EVENTS_RECEIVED};
+use crate::metrics::EVENTS_RECEIVED;
 use crate::readiness::{self, Readiness, start_readisness_probes};
 
 #[derive(Serialize)]
-struct ReadyReport {
+struct HealthReport {
+    accepting: bool,
     disk_ok: bool,
     mqtt_ok: bool,
 }
@@ -41,6 +42,7 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
             }),
         )
         .layer(Extension(readiness.clone()))
+        .layer(Extension(cfg.clone()))
         .layer(prom_layer)
         .layer(
             TraceLayer::new_for_http()
@@ -65,7 +67,7 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
 
     let listener: TcpListener = TcpListener::bind(addr).await?;
     println!("listening on {}", listener.local_addr()?);
-
+    readiness.set_accepting(true);
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal(readiness.clone()))
         .await?;
@@ -74,14 +76,15 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
 
 pub async fn shutdown_signal(readiness: Arc<Readiness>) {
     use tokio::signal::unix::{SignalKind, signal};
-    let mut sigint = signal(SignalKind::interrupt()).unwrap();
-    let mut sigterm = signal(SignalKind::interrupt()).unwrap();
+    let mut sigint = signal(SignalKind::interrupt()).expect("sigint");
+    let mut sigterm = signal(SignalKind::terminate()).expect("sigterm");
 
     tokio::select! {
       _ = sigint.recv() => (),
       _ = sigterm.recv() => (),
     }
 
+    readiness.set_accepting(false);
     readiness.disk_ok.store(false, Ordering::Relaxed);
     readiness.mqtt_ok.store(false, Ordering::Relaxed);
 
@@ -89,23 +92,27 @@ pub async fn shutdown_signal(readiness: Arc<Readiness>) {
 }
 
 #[tracing::instrument(skip_all, fields(kind = "health"))]
-async fn healthz() -> impl IntoResponse {
+async fn healthz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
     EVENTS_RECEIVED.inc();
-    tracing::info!("health probe ok");
-    "ok"
-}
-
-#[tracing::instrument(skip_all)]
-async fn readyz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
-    EVENTS_RECEIVED.inc();
-    let report = ReadyReport {
+    let report = HealthReport {
+        accepting: true, // or expose the raw accepting flag if you want
         disk_ok: r.disk_ok.load(Ordering::Relaxed),
         mqtt_ok: r.mqtt_ok.load(Ordering::Relaxed),
     };
-    if r.all_ok() {
-        (StatusCode::OK, Json(report))
+    (StatusCode::OK, axum::Json(report))
+}
+
+#[tracing::instrument(skip_all)]
+async fn readyz(
+    Extension(r): Extension<Arc<Readiness>>,
+    Extension(cfg): Extension<Arc<GatewayGfg>>,
+) -> impl IntoResponse {
+    EVENTS_RECEIVED.inc();
+    let ok = r.is_ready(&cfg.health);
+    if ok {
+        StatusCode::OK
     } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(report))
+        StatusCode::SERVICE_UNAVAILABLE
     }
 }
 
