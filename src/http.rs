@@ -95,7 +95,7 @@ pub async fn shutdown_signal(readiness: Arc<Readiness>) {
 async fn healthz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
     EVENTS_RECEIVED.inc();
     let report = HealthReport {
-        accepting: true, // or expose the raw accepting flag if you want
+        accepting: true,
         disk_ok: r.disk_ok.load(Ordering::Relaxed),
         mqtt_ok: r.mqtt_ok.load(Ordering::Relaxed),
     };

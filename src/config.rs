@@ -14,6 +14,8 @@ pub struct GatewayGfg {
     pub storage: StorageCfg,
     #[serde(default)]
     pub health: HealthCfg,
+    #[serde(default)]
+    pub ingest: IngestCfg,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -75,6 +77,26 @@ impl Default for HealthCfg {
             require_disk: (false),
             probe_interval_ms: Some(1000),
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct IngestCfg {
+    pub max_payload_bytes: usize,
+    pub queue_capacity: usize,
+    pub ack_mode: AckMode,
+    pub require_auth: bool,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum AckMode {
+    Enqueue,
+    Sink,
+}
+impl Default for AckMode {
+    fn default() -> Self {
+        AckMode::Enqueue
     }
 }
 
