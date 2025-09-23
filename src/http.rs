@@ -1,5 +1,9 @@
 use axum::http::{self, HeaderValue, StatusCode};
-use axum::{Extension, Router, response::IntoResponse, routing::get};
+use axum::{
+    Extension, Router,
+    response::IntoResponse,
+    routing::{get, post},
+};
 use axum_prometheus::PrometheusMetricLayer;
 use http::Response;
 use prometheus::{Encoder, TextEncoder};
@@ -8,9 +12,11 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 use tracing::Span;
 
+use crate::app::AppState;
 use crate::config::GatewayGfg;
 use crate::metrics::EVENTS_RECEIVED;
 use crate::readiness::{self, Readiness, start_readisness_probes};
@@ -28,9 +34,36 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
     let readiness = Arc::new(readiness::Readiness::new());
     start_readisness_probes(cfg.clone(), readiness.clone());
 
+    // pipeline queue
+    let (tx, mut rx) =
+        tokio::sync::mpsc::channel::<crate::ingest::types::Event>(cfg.ingest.queue_capacity);
+
+    let state = AppState {
+        cfg: cfg.clone(),
+        ready: readiness.clone(),
+        tx,
+    };
+
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            tracing::info!(
+              device=%event.device_id,
+              seq=?event.seq,
+              bytes=event.bytes,
+              "sink: processing event"
+            );
+
+            tracing::info!(device=%event.device_id, "sink: ok");
+        }
+    });
+
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
+        .route(
+            "/v1/ingest/:device_id",
+            post(crate::ingest::handler::ingest),
+        )
         .route(
             "/metrics",
             get({
@@ -41,6 +74,10 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
                 }
             }),
         )
+        .with_state(state.clone())
+        .layer(RequestBodyLimitLayer::new(
+            state.cfg.ingest.max_payload_bytes,
+        ))
         .layer(Extension(readiness.clone()))
         .layer(Extension(cfg.clone()))
         .layer(prom_layer)

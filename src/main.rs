@@ -1,5 +1,7 @@
+mod app;
 mod config;
 mod http;
+mod ingest;
 mod metrics;
 mod readiness;
 

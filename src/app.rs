@@ -1,0 +1,13 @@
+use std::sync::Arc;
+use tokio::sync::mpsc;
+
+use crate::config::GatewayGfg;
+use crate::ingest::types::Event;
+use crate::readiness::Readiness;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub cfg: Arc<GatewayGfg>,
+    pub ready: Arc<Readiness>,
+    pub tx: mpsc::Sender<Event>,
+}
