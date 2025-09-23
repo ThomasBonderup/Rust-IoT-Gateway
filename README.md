@@ -8,8 +8,17 @@ The gateway connect STM32-based IoT devices to AWS IoT Core over MQTT/TLS applyi
 ## Status
 - [x] Health endpoint (`/health`, `/ready`)
 - [x] Prometheus metrics endpoint (`/metrics`)
-- [] MQTT publish to AWS IoT Core
-- [] Observability stack (OTel Collector, Prometheus, Grafana, Tempo)
+- [] Ingest handler
+- [] MQTT Sink with publish to AWS IoT Core
+- [] File Sink
+- [] Reliability & safety (Idempotency, Write-Ahead Log / persistent queue, retry policy)
+- [] Security
+- [] Observability & SLOs (OTel Collector, Prometheus, Grafana, Tempo)
+- [] Testing (Unit, integration and load test)
+- [] Packaging & deploy
+
+Nice to haves:
+- Batch ingest, schema, OpenAPI UI, Client SDKs
 
 ## Tech Stack
 IoT, Rust, async, MQTT, TLS, OpenTelemetry
@@ -23,5 +32,5 @@ Then:
 ```
 curl -i -X POST 'http://127.0.0.1:8000/v1/ingest/device_1' \                                                                                                             13:20:41
   -H 'Content-Type: application/json' \
-  -d '{"seq":1,"metrics":{"temp":21.5},"tags":{"site":"AAL"},"payload":{"raw":"ok"}}'
+  -d '{"seq":1,"metrics":{"temp_c":21.5},"tags":{"site":"AAL"},"payload":{"raw":"ok"}}'
 ```
