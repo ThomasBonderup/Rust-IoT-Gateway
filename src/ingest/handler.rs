@@ -7,6 +7,15 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use time::OffsetDateTime;
 
+const MAX_METRICS: usize = 32;
+
+fn validate_maps(body: &IngestBody) -> Result<(), &'static str> {
+    if body.metrics.len() > MAX_METRICS {
+        return Err("too_many_metrics");
+    }
+    Ok(())
+}
+
 pub async fn ingest(
     State(st): State<AppState>,
     Path(device_id): Path<String>,
@@ -14,6 +23,11 @@ pub async fn ingest(
 ) -> impl IntoResponse {
     if !st.ready.is_ready(&st.cfg.health) {
         return StatusCode::SERVICE_UNAVAILABLE;
+    }
+
+    if let Err(reason) = validate_maps(&body) {
+        st.metrics.ingest_rejected_total(reason);
+        return StatusCode::BAD_REQUEST;
     }
 
     let now = OffsetDateTime::now_utc();

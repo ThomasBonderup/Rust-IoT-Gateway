@@ -1,12 +1,12 @@
 use axum::http::{self, HeaderValue, StatusCode};
 use axum::{
     Extension, Router,
+    extract::State,
     response::IntoResponse,
     routing::{get, post},
 };
 use axum_prometheus::PrometheusMetricLayer;
 use http::Response;
-use prometheus::{Encoder, TextEncoder};
 use serde::Serialize;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -18,7 +18,6 @@ use tracing::Span;
 
 use crate::app::AppState;
 use crate::config::GatewayGfg;
-use crate::metrics::EVENTS_RECEIVED;
 use crate::readiness::{self, Readiness, start_readisness_probes};
 
 #[derive(Serialize)]
@@ -30,7 +29,7 @@ struct HealthReport {
 
 pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::Result<()> {
     let (prom_layer, prom_handle) = PrometheusMetricLayer::pair();
-
+    let app_metrics = crate::metrics::AppMetrics::new();
     let readiness = Arc::new(readiness::Readiness::new());
     start_readisness_probes(cfg.clone(), readiness.clone());
 
@@ -42,6 +41,7 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
         cfg: cfg.clone(),
         ready: readiness.clone(),
         tx,
+        metrics: app_metrics.clone(),
     };
 
     tokio::spawn(async move {
@@ -64,16 +64,7 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
             "/v1/ingest/:device_id",
             post(crate::ingest::handler::ingest),
         )
-        .route(
-            "/metrics",
-            get({
-                let h = prom_handle.clone();
-                move || {
-                    let text = h.render();
-                    metrics(text)
-                }
-            }),
-        )
+        .route("/metrics", get(|| async move { prom_handle.render() }))
         .with_state(state.clone())
         .layer(RequestBodyLimitLayer::new(
             state.cfg.ingest.max_payload_bytes,
@@ -129,8 +120,11 @@ pub async fn shutdown_signal(readiness: Arc<Readiness>) {
 }
 
 #[tracing::instrument(skip_all, fields(kind = "health"))]
-async fn healthz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
-    EVENTS_RECEIVED.inc();
+async fn healthz(
+    State(st): State<AppState>,
+    Extension(r): Extension<Arc<Readiness>>,
+) -> impl IntoResponse {
+    st.metrics.events_received();
     let report = HealthReport {
         accepting: true,
         disk_ok: r.disk_ok.load(Ordering::Relaxed),
@@ -141,31 +135,15 @@ async fn healthz(Extension(r): Extension<Arc<Readiness>>) -> impl IntoResponse {
 
 #[tracing::instrument(skip_all)]
 async fn readyz(
+    State(st): State<AppState>,
     Extension(r): Extension<Arc<Readiness>>,
     Extension(cfg): Extension<Arc<GatewayGfg>>,
 ) -> impl IntoResponse {
-    EVENTS_RECEIVED.inc();
+    st.metrics.events_received();
     let ok = r.is_ready(&cfg.health);
     if ok {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE
     }
-}
-
-pub async fn metrics(prom_text: String) -> impl IntoResponse {
-    let mut buf = Vec::with_capacity(prom_text.len() + 4096);
-    buf.extend_from_slice(prom_text.as_bytes());
-
-    let encoder = TextEncoder::new();
-    let mfs = crate::metrics::REGISTRY.gather();
-    encoder.encode(&mfs, &mut buf).unwrap();
-    let body = String::from_utf8(buf).unwrap();
-    (
-        [(
-            axum::http::header::CONTENT_TYPE,
-            HeaderValue::from_static("text/plain; version=0.0.4"),
-        )],
-        body,
-    )
 }

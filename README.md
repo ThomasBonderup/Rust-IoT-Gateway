@@ -30,7 +30,7 @@ RUST_LOG=info cargo run
 ```
 Then:
 ```
-curl -i -X POST 'http://127.0.0.1:8000/v1/ingest/device_1' \                                                                                                             13:20:41
+curl -i -X POST 'http://127.0.0.1:8000/v1/ingest/device_1' \
   -H 'Content-Type: application/json' \
   -d '{"seq":1,"metrics":{"temp_c":21.5},"tags":{"site":"AAL"},"payload":{"raw":"ok"}}'
 ```

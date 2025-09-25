@@ -80,12 +80,22 @@ impl Default for HealthCfg {
     }
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct IngestCfg {
     pub max_payload_bytes: usize,
     pub queue_capacity: usize,
     pub ack_mode: AckMode,
     pub require_auth: bool,
+}
+impl Default for IngestCfg {
+    fn default() -> Self {
+        Self {
+            max_payload_bytes: 65536,
+            queue_capacity: 10000,
+            ack_mode: AckMode::Enqueue,
+            require_auth: false,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Copy)]

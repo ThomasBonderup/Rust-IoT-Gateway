@@ -1,17 +1,28 @@
-use once_cell::sync::Lazy;
-use prometheus::{IntCounter, Registry};
+use metrics::{Unit, counter, describe_counter};
+use std::sync::Arc;
 
-pub static REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
+#[derive(Clone, Default)]
+pub struct AppMetrics;
 
-pub static EVENTS_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
-    let events_received = IntCounter::new(
-        "gateway_events_received_total",
-        "Number of events received via endpoints",
-    )
-    .unwrap();
+impl AppMetrics {
+    pub fn new() -> Arc<Self> {
+        describe_counter!(
+            "gateway_events_received_total",
+            Unit::Count,
+            "Number of events received via endpoints"
+        );
+        describe_counter!(
+            "ingest_rejected_total",
+            Unit::Count,
+            "Rejected ingest requests by reason"
+        );
+        Arc::new(Self)
+    }
 
-    REGISTRY
-        .register(Box::new(events_received.clone()))
-        .unwrap();
-    events_received
-});
+    pub fn ingest_rejected_total(&self, reason: &'static str) {
+        counter!("ingest_rejected_total", "reason" => reason).increment(1);
+    }
+    pub fn events_received(&self) {
+        counter!("gateway_events_received_total").increment(1);
+    }
+}
