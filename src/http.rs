@@ -1,4 +1,4 @@
-use axum::http::{self, HeaderValue, StatusCode};
+use axum::http::{self, StatusCode};
 use axum::{
     Extension, Router,
     extract::State,
@@ -15,10 +15,21 @@ use tokio::net::TcpListener;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 use tracing::Span;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::app::AppState;
 use crate::config::GatewayGfg;
+use crate::ingest::types::IngestBody;
 use crate::readiness::{self, Readiness, start_readisness_probes};
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(crate::ingest::handler::ingest),
+    components(schemas(IngestBody)),
+    tags((name = "ingest", description = "Device data ingestion"))
+)]
+pub struct ApiDoc;
 
 #[derive(Serialize)]
 struct HealthReport {
@@ -57,7 +68,10 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
         }
     });
 
+    let openapi = ApiDoc::openapi();
+
     let app = Router::new()
+        .merge(SwaggerUi::new("/docs").url("/docs/openapi.json", openapi))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route(

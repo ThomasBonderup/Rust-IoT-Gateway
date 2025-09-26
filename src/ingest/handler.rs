@@ -16,6 +16,19 @@ fn validate_maps(body: &IngestBody) -> Result<(), &'static str> {
     Ok(())
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/ingest/{device_id}",
+    request_body = IngestBody,
+    params(
+        ("device_id" = String, Path, description = "Device identifier")
+    ),
+    responses(
+        (status = 202, description = "Accepted (enqueued)"),
+        (status = 400, description = "validation error"),
+    ),
+    tag = "ingest"
+)]
 pub async fn ingest(
     State(st): State<AppState>,
     Path(device_id): Path<String>,
