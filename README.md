@@ -99,7 +99,7 @@ Once the gateway is running, open:
 ### Idempotency (planned)
 - `(device_id, seq)` used to drop duplicates; until then, clients should avoid replaying the same seq.
 
-### Quick start
+## Quick start
 ```bash
 # Run the gateway
 cargo run --release
@@ -109,20 +109,20 @@ open http://127.0.0.1:8000/docs        # macOS
 # xdg-open http://127.0.0.1:8000/docs  # Linux
 ```
 
-### Example requests
-#### Ready / Not Ready
+## Example requests
+### Ready / Not Ready
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/readyz
 ```
 
-#### Ingest (happy path)
+### Ingest (happy path)
 ```bash
 curl -i -X POST 'http://127.0.0.1:8000/v1/ingest/device_1' \
   -H 'Content-Type: application/json' \
   -d '{"seq":1,"metrics":{"temp_c":21.5},"tags":{"site":"AAL"},"payload":{"raw":"ok"}}'
 ```
 
-### Export OpenAPI Spec (Planned)
+## Export OpenAPI Spec (Planned)
 TODO: Add a --dump_openapi flag to rust binary.
 
 ```bash
@@ -133,5 +133,5 @@ cargo run -- --dump_openapi > openapi.json
 ### Clients (Planned)
 TODO: Use external CLI to generate a Python client from OpenAPI spec.
 
-### Metrics
+## Metrics
 - /metrics exposes HTTP + app metrics (e.g., gateway_events_received_total)
