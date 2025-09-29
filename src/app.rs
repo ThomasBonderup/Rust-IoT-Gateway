@@ -10,6 +10,6 @@ use crate::readiness::Readiness;
 pub struct AppState {
     pub cfg: Arc<GatewayGfg>,
     pub ready: Arc<Readiness>,
-    pub tx: mpsc::Sender<Event>,
+    pub ingest_tx: mpsc::Sender<Event>,
     pub metrics: Arc<AppMetrics>,
 }

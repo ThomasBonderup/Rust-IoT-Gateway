@@ -1,4 +1,5 @@
 use crate::app::AppState;
+use crate::config::AckMode;
 use crate::ingest::types::{Event, IngestBody};
 
 use axum::Json;
@@ -54,21 +55,11 @@ pub async fn ingest(
         received_at: now,
         bytes: 0,
     };
-
-    match st.cfg.ingest.ack_mode {
-        crate::config::AckMode::Enqueue => {
-            if st.tx.try_send(event).is_err() {
-                StatusCode::SERVICE_UNAVAILABLE
-            } else {
-                StatusCode::ACCEPTED
-            }
-        }
-        crate::config::AckMode::Sink => {
-            if st.tx.try_send(event).is_err() {
-                StatusCode::SERVICE_UNAVAILABLE
-            } else {
-                StatusCode::OK
-            }
-        }
+    match st.ingest_tx.try_send(event) {
+        Ok(_) => match st.cfg.ingest.ack_mode {
+            AckMode::Enqueue => StatusCode::ACCEPTED,
+            AckMode::Sink => StatusCode::OK,
+        },
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE,
     }
 }

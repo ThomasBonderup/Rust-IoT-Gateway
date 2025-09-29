@@ -51,7 +51,7 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
     let state = AppState {
         cfg: cfg.clone(),
         ready: readiness.clone(),
-        tx,
+        ingest_tx: tx,
         metrics: app_metrics.clone(),
     };
 
