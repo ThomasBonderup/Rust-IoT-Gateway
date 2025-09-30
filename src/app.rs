@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use crate::config::GatewayGfg;
-use crate::ingest::types::Event;
+use crate::domain::Event;
 use crate::metrics::AppMetrics;
 use crate::readiness::Readiness;
 

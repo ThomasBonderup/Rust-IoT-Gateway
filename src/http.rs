@@ -20,6 +20,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::app::AppState;
 use crate::config::GatewayGfg;
+use crate::dispatcher::Dispatcher;
+use crate::domain::Event;
+use crate::fanout::FanoutSink;
 use crate::ingest::types::IngestBody;
 use crate::readiness::{self, Readiness, start_readisness_probes};
 
@@ -45,8 +48,11 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
     start_readisness_probes(cfg.clone(), readiness.clone());
 
     // pipeline queue
-    let (tx, mut rx) =
-        tokio::sync::mpsc::channel::<crate::ingest::types::Event>(cfg.ingest.queue_capacity);
+    let (tx, rx) = tokio::sync::mpsc::channel::<Event>(cfg.ingest.queue_capacity);
+
+    let fanout = Arc::new(FanoutSink::new(vec![]));
+
+    tokio::spawn(Dispatcher::new(rx, fanout.clone()).run());
 
     let state = AppState {
         cfg: cfg.clone(),
@@ -54,19 +60,6 @@ pub async fn serve(addr: std::net::SocketAddr, cfg: Arc<GatewayGfg>) -> anyhow::
         ingest_tx: tx,
         metrics: app_metrics.clone(),
     };
-
-    tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            tracing::info!(
-              device=%event.device_id,
-              seq=?event.seq,
-              bytes=event.bytes,
-              "sink: processing event"
-            );
-
-            tracing::info!(device=%event.device_id, "sink: ok");
-        }
-    });
 
     let openapi = ApiDoc::openapi();
 

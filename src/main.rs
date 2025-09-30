@@ -1,12 +1,6 @@
-mod app;
-mod config;
-mod http;
-mod ingest;
-mod metrics;
-mod readiness;
-
-use crate::config::GatewayGfg;
 use clap::Parser;
+use rust_iot_gateway::config::GatewayGfg;
+use rust_iot_gateway::http;
 use std::net::SocketAddr;
 use std::sync::Arc;
 

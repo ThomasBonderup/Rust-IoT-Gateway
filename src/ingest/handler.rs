@@ -1,12 +1,13 @@
-use crate::app::AppState;
-use crate::config::AckMode;
-use crate::ingest::types::{Event, IngestBody};
-
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use time::OffsetDateTime;
+
+use crate::app::AppState;
+use crate::config::AckMode;
+use crate::domain::Event;
+use crate::ingest::types::IngestBody;
 
 const MAX_METRICS: usize = 32;
 
